@@ -10,6 +10,7 @@ int main(void)
         return -1;
     }
 
+    // Blink the led.
     while(1)
     {
         ioctl(my_dev, 0, 0);

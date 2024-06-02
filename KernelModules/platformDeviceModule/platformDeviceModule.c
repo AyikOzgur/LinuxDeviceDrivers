@@ -4,97 +4,91 @@
 #include <linux/miscdevice.h>
 #include <linux/of.h> 
 
-
-
-// device open syscall
-static int my_open(struct inode *inode, struct file *file)
+static int open(struct inode *inode, struct file *file)
 {
-    pr_info("my_open() is callded.\n");
+    pr_info("open() is callded.\n");
     return 0;
 }
 
-// device close syscall
-static int my_close(struct inode *inode, struct file *file)
+static int close(struct inode *inode, struct file *file)
 {
-    pr_info("my_close() is called.\n");
+    pr_info("close() is called.\n");
     return 0; 
 }
 
-// device ioctl syscall
-static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    pr_info("my_ioctl() is called. cmd : %d,  arg : %d", cmd, arg);
+    pr_info("ioctl() is called. cmd : %d,  arg : %d", cmd, arg);
     return 0;
 }
 
-
-// file operations struct
-static const struct file_operations my_fops = {
+static const struct file_operations deviceFileOperations = 
+{
     .owner = THIS_MODULE,
-    .open = my_open,
-    .release = my_close,
-    .unlocked_ioctl = my_ioctl,
+    .open = open,
+    .release = close,
+    .unlocked_ioctl = ioctl,
 };
 
-// Decleare and initialize struct miscdevice
-static struct miscdevice my_miscdevice = {
+static struct miscdevice miscDevice = 
+{
     .minor = MISC_DYNAMIC_MINOR,
     .name = "mydev",
-    .fops = &my_fops,
+    .fops = &deviceFileOperations,
 };
 
 // Device init function is going to be called when driver is matched with device
 // not when module is loaded as char device.
-static int __init my_probe(struct platform_device *pdev)
+static int __init probe(struct platform_device *pdev)
 {
-   int ret;
-   pr_info("my_prbe is called.\n");
+    pr_info("probe is called.\n");
 
-  ret = misc_register(&my_miscdevice);
-  if(ret != 0)
-  {
-    pr_err("Coould not register misc device.\n");
+    int ret = misc_register(&miscDevice);
+    if(ret != 0)
+    {
+    pr_err("Could not register misc device.\n");
     return ret;
-  }
+    }
 
-  pr_info("mydev got minor : %i", my_miscdevice.minor);
-  return 0;
+    pr_info("mydev got minor : %i", miscDevice.minor);
+    return 0;
 }
 
 
 // Exit function
-static int __exit my_remove(struct platform_device *pdev)
+static int __exit remove(struct platform_device *pdev)
 {
     pr_info("my_remove is called.\n");
-    misc_deregister(&my_miscdevice);
+    misc_deregister(&miscDevice);
     return 0;
 }
 
 // Declera list of devices supported by driver
-static const struct of_device_id my_of_ids[] = {
-{ .compatible = "my_compatible"},
-{},
+static const struct of_device_id ofIDs[] = 
+{
+    { .compatible = "my_compatible"},
+    {},
 };
 
-MODULE_DEVICE_TABLE(of,my_of_ids);
+MODULE_DEVICE_TABLE(of, ofIDs);
 
 
 // create platform driver
-
-static struct platform_driver my_platform_driver = {
-    .probe = my_probe,
-    .remove = my_remove,
-    .driver = {
+static struct platform_driver platformDriver = 
+{
+    .probe = probe,
+    .remove = remove,
+    .driver = 
+    {
         .name = "my_compatible",
-        .of_match_table = my_of_ids,
+        .of_match_table = ofIDs,
         .owner = THIS_MODULE,
     }
 };
 
 
 // Register your platform driver
-
-module_platform_driver(my_platform_driver);
+module_platform_driver(platformDriver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ahmet Ozgur Ayik");

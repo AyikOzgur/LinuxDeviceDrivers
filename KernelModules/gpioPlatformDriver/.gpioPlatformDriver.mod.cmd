@@ -1,1 +1,0 @@
-cmd_/home/pi/Modules/gpioPlatformDriver/gpioPlatformDriver.mod := printf '%s\n'   gpioPlatformDriver.o | awk '!x[$$0]++ { print("/home/pi/Modules/gpioPlatformDriver/"$$0) }' > /home/pi/Modules/gpioPlatformDriver/gpioPlatformDriver.mod
