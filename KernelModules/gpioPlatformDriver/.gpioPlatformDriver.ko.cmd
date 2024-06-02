@@ -1,0 +1,1 @@
+cmd_/home/pi/Modules/gpioPlatformDriver/gpioPlatformDriver.ko := ld -r -EL -z noexecstack --build-id=sha1  -T scripts/module.lds -o /home/pi/Modules/gpioPlatformDriver/gpioPlatformDriver.ko /home/pi/Modules/gpioPlatformDriver/gpioPlatformDriver.o /home/pi/Modules/gpioPlatformDriver/gpioPlatformDriver.mod.o;  true

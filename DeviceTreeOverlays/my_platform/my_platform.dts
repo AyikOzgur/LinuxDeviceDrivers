@@ -1,0 +1,15 @@
+/dts-v1/;
+
+/ {
+    compatible = "brcm,bcm2835";
+    fragment@0 {
+        target-path = "/";
+        __overlay__{
+           my_test_device {
+             compatible = "my_compatible"; // Replace with your compatible string
+             status = "okay"; // Enable the device tree node
+         };  
+      };
+    };
+};
+

@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "mychardevice": "c",
+        "module.h": "c",
+        "fs.h": "c",
+        "fscrypt.h": "c",
+        "ioctl.h": "c"
+    }
+}
