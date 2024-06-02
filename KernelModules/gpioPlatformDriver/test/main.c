@@ -3,8 +3,8 @@
 
 int main(void)
 {
-    int my_dev = open("/dev/myGpioDevice", 0);
-    if (my_dev < 0) 
+    int myDev = open("/dev/myGpioDevice", 0);
+    if (myDev < 0) 
     {
         perror("Fail to open device file: /dev/myGpioDevice.");
         return -1;
@@ -13,9 +13,9 @@ int main(void)
     // Blink the led.
     while(1)
     {
-        ioctl(my_dev, 0, 0);
+        ioctl(myDev, 0, 0);
         sleep(1);
-        ioctl(my_dev, 0, 1); 
+        ioctl(myDev, 0, 1); 
         sleep(1);
     }
     return 0;
