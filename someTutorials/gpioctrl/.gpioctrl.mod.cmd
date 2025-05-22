@@ -1,0 +1,1 @@
+savedcmd_/home/pi/Projects/LinuxDeviceDrivers/someTutorials/gpioctrl/gpioctrl.mod := printf '%s\n'   gpioctrl.o | awk '!x[$$0]++ { print("/home/pi/Projects/LinuxDeviceDrivers/someTutorials/gpioctrl/"$$0) }' > /home/pi/Projects/LinuxDeviceDrivers/someTutorials/gpioctrl/gpioctrl.mod
