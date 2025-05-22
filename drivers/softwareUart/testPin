@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# List of known valid GPIO pins based on gpioinfo output (you can adjust this list)
+valid_pins=(0 1 2 3 4 5 6 7 8 9 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 65 69 70 71 72 73 74 75 76 78 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100)
+
+for pin in "${valid_pins[@]}"
+do
+    echo "Checking GPIO pin $pin..."
+    
+    # Export the GPIO pin
+    if [ ! -d "/sys/class/gpio/gpio$pin" ]; then
+        echo $pin > /sys/class/gpio/export
+        sleep 0.1  # Short delay to allow export
+    fi
+
+    # Set direction to input
+    if [ -e "/sys/class/gpio/gpio$pin/direction" ]; then
+        echo "in" > /sys/class/gpio/gpio$pin/direction
+    else
+        echo "GPIO pin $pin does NOT support setting direction."
+        continue
+    fi
+
+    # Check if the 'edge' file exists
+    if [ -e "/sys/class/gpio/gpio$pin/edge" ]; then
+        echo "GPIO pin $pin supports interrupts."
+        # Set edge to both for testing
+        echo "both" > /sys/class/gpio/gpio$pin/edge
+    else
+        echo "GPIO pin $pin does NOT support interrupts."
+    fi
+
+    # Unexport the GPIO pin
+    echo $pin > /sys/class/gpio/unexport
+done
