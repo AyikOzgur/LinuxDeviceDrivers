@@ -13,32 +13,29 @@ typedef struct
    int outputPin;
 } GPIOConfig_t;
 
-
-
 int main(void)
 {
     /* First, you need run "mknod /dev/mydev c 202 0" to create /dev/mydev */
-    int myDevice = open("/dev/my_gpio_driver", 0);
-    if (myDevice < 0) 
+    int myGpioDriver = open("/dev/my_gpio_driver", 0);
+    if (myGpioDriver < 0) 
     {
         perror("Fail to open device file: /dev/mydev.");
         return -1;
     } 
 
     GPIOConfig_t gpioParams;
-    gpioParams.inputPin = 21;
-    gpioParams.outputPin = 22;
+    // Gpio numbers of pins will be platform dependent.
+    gpioParams.inputPin = 591;  // GPIO20 on raspberry pi.
+    gpioParams.outputPin = 592; // GPIO21 on raspberry pi.
     
-    ioctl(myDevice, INIT_GPIO, &gpioParams); /* cmd = 100, arg = 110. */
-    return 0;
-
+    ioctl(myGpioDriver, INIT_GPIO, &gpioParams); /* cmd = 100, arg = 110. */
+    unsigned long val = 0;
     while(1)
     {
-        ioctl(myDevice, 100, 110); /* cmd = 100, arg = 110. */
+        ioctl(myGpioDriver, READ_PIN, &val);
+        ioctl(myGpioDriver, WRITE_PIN, &val);
     }
-    ioctl(myDevice, 100, 110); /* cmd = 100, arg = 110. */
-    close(myDevice);
 
-
+    close(myGpioDriver);
     return 0;
 }

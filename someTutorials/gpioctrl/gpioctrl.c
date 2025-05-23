@@ -24,6 +24,18 @@ static int open(struct inode *inode, struct file *file)
 
 static int close(struct inode *inode, struct file *file)
 {
+   if (g_inputGpio) 
+   {
+      gpiod_put(g_inputGpio);
+      g_inputGpio = NULL;
+   }
+
+   if (g_outputGpio)
+   {
+      gpiod_put(g_outputGpio);
+      g_outputGpio = NULL;
+   }
+
    return 0;
 }
 
@@ -39,7 +51,7 @@ static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
          pr_err("gpioctrl - Bad address");
          return -EFAULT; // Bad address.
       }
-      pr_info("gpioctrl - In put pin %d \n Output pin %d\n", g_gpioParams.inputPin, g_gpioParams.outputPin);
+      pr_info("gpioctrl - Input pin %d \n Output pin %d\n", g_gpioParams.inputPin, g_gpioParams.outputPin);
 
       // Check if pin numbers are logical.
       if (g_gpioParams.inputPin == g_gpioParams.outputPin ||
@@ -71,7 +83,7 @@ static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
          pr_err("gpioctrl - Error setting pin %d as input\n", g_gpioParams.inputPin);
          return ret;
       }
-      pr_info("gpioctrl - driver is initialized.\n");
+      pr_info("gpioctrl - Driver is initialized.\n");
       break;
    }
    case WRITE_PIN:
@@ -122,19 +134,19 @@ static int __init gpictrl_init(void)
    int ret = misc_register(&miscDevice);
    if (ret != 0)
    {
-      pr_err("Could not register gpio misc device");
+      pr_err("gpioctrl - Could not register misc device");
       return ret;
    }
 
    // Device info
-   pr_info("gpioctrl driver is loaded with %i minor number as misc device.\n", 
+   pr_info("gpioctrl - Driver is loaded with %i minor number as misc device.\n", 
             miscDevice.minor);
    return 0;
 }
 
 static void __exit gpioctrl_exit(void)
 {
-   pr_info("gpioctrl is removed.\n");
+   pr_info("gpioctrl - is removed.\n");
 
    if (g_inputGpio) 
    {

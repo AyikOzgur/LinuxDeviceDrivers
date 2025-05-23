@@ -1,1 +1,0 @@
-savedcmd_/home/pi/Projects/LinuxDeviceDrivers/someTutorials/gpioctrl/modules.order := {   echo /home/pi/Projects/LinuxDeviceDrivers/someTutorials/gpioctrl/gpioctrl.o; :; } > /home/pi/Projects/LinuxDeviceDrivers/someTutorials/gpioctrl/modules.order
