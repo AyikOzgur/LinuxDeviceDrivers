@@ -46,8 +46,8 @@ static int __init probe(struct platform_device *pdev)
     int ret = misc_register(&miscDevice);
     if(ret != 0)
     {
-    pr_err("Could not register misc device.\n");
-    return ret;
+        pr_err("Could not register misc device.\n");
+        return ret;
     }
 
     pr_info("mydev got minor : %i", miscDevice.minor);
