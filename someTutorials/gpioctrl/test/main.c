@@ -15,7 +15,6 @@ typedef struct
 
 int main(void)
 {
-    /* First, you need run "mknod /dev/mydev c 202 0" to create /dev/mydev */
     int myGpioDriver = open("/dev/my_gpio_driver", 0);
     if (myGpioDriver < 0) 
     {
@@ -28,7 +27,7 @@ int main(void)
     gpioParams.inputPin = 591;  // GPIO20 on raspberry pi.
     gpioParams.outputPin = 592; // GPIO21 on raspberry pi.
     
-    ioctl(myGpioDriver, INIT_GPIO, &gpioParams); /* cmd = 100, arg = 110. */
+    ioctl(myGpioDriver, INIT_GPIO, &gpioParams);
     unsigned long val = 0;
     while(1)
     {
