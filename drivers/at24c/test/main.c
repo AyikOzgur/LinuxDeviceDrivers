@@ -15,8 +15,8 @@ int main(void)
     } 
 
     const int bufferSize = 256000; // 256KB capacity of at24c256.
-    char *inputData = malloc(bufferSize);
-    char *outputData = malloc(bufferSize);
+    char *inputData = (char*)malloc(bufferSize);
+    char *outputData = (char*)malloc(bufferSize);
 
     for (int i = 0; i < bufferSize; i++)
         inputData[i] = (char)(i + 50);
@@ -32,10 +32,8 @@ int main(void)
         close(at24c_fd);
         return -1;
     }
-    else
-    {
-        printf("%d bytes written.\n", bytesWritten);
-    }
+
+    printf("%d bytes written.\n", bytesWritten);
 
     // Put address again to 0x10.
     lseek(at24c_fd, 0x00, SEEK_SET);
@@ -48,13 +46,10 @@ int main(void)
         close(at24c_fd);
         return -1;
     }
-    else
-    {
-        printf("%d bytes read.\n", readBytes);
-        outputData[readBytes] = '\0';
-    }
 
-    /* Compare with memcmp() */
+    printf("%d bytes read.\n", readBytes);
+    outputData[readBytes] = '\0';
+
     if (memcmp(inputData, outputData, bufferSize) == 0) 
     {
         printf("Success: buffers match!\n");

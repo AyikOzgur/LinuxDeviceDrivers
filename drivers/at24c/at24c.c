@@ -98,22 +98,20 @@ static ssize_t at24c_write(struct file *file, const char __user *buf,
     while (remaining) 
     {
         loff_t offset = *ppos;
+        
         /* ensure we don’t wrap past a page: */
         size_t page_off = offset % adata->page_size;
         size_t chunk    = min(remaining,
                               adata->page_size - page_off);
 
-        /* Build address in buf[0..1]: */
         adata->buf[0] = (offset >> 8) & 0xFF;
         adata->buf[1] =  offset       & 0xFF;
 
-        /* Copy user’s data into buf[2..]: */
         if (copy_from_user(&adata->buf[2],
                            buf + bytesWritten,
                            chunk))
             return -EFAULT;
 
-        /* Send address + chunk in one shot: */
         ret = i2c_master_send(client,
                               adata->buf,
                               AT24C_ADDR_BYTES + chunk);
