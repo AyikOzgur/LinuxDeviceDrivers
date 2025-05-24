@@ -6,17 +6,20 @@
 #include <linux/uaccess.h> 
 #include <linux/fs.h> 
 #include <linux/delay.h>
+#include <linux/mutex.h>
+
 
 #define AT24C_DEFAULT_PAGE_SIZE  64
 #define AT24C_ADDR_BYTES          2
 
 struct at24c
 {
-    struct i2c_client  *client;
-    struct miscdevice   miscdev;
-    u8                 *buf;         /* bounce buffer */
-    size_t              buf_sz;      /* = AT24C_ADDR_BYTES + page_size */
-    size_t              page_size; 
+    struct i2c_client *client;
+    struct miscdevice miscdev;
+    u8 *buf;
+    size_t buf_sz; /* = AT24C_ADDR_BYTES + page_size */
+    size_t page_size;
+    struct mutex lock;
 };
 
 static int at24c_open(struct inode *inode, struct file *file)
@@ -44,20 +47,22 @@ static long at24c_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 static ssize_t at24c_read(struct file *file, char __user *buf,
                           size_t count, loff_t *ppos)
 {
-    struct at24c      *adata  = file->private_data;
+    struct at24c *adata = file->private_data;
     struct i2c_client *client = adata->client;
     size_t remaining = count;
     size_t bytesRead = 0;
     int ret;
 
+    mutex_lock(&adata->lock);
+
     while (remaining) 
     {
-        loff_t offset   = *ppos;
-        size_t chunk    = min(remaining, adata->page_size);
+        loff_t offset = *ppos;
+        size_t chunk = min(remaining, adata->page_size);
 
         /* Build the 2-byte address in buf[0..1]: */
         adata->buf[0] = (offset >> 8) & 0xFF;
-        adata->buf[1] =  offset       & 0xFF;
+        adata->buf[1] =  offset & 0xFF;
 
         /* Tell the EEPROM what word-address we want: */
         ret = i2c_master_send(client,
@@ -83,17 +88,21 @@ static ssize_t at24c_read(struct file *file, char __user *buf,
         *ppos += ret;
     }
 
+    mutex_unlock(&adata->lock);
+
     return bytesRead;
 }
 
 static ssize_t at24c_write(struct file *file, const char __user *buf,
                            size_t count, loff_t *ppos)
 {
-    struct at24c      *adata  = file->private_data;
+    struct at24c *adata  = file->private_data;
     struct i2c_client *client = adata->client;
     size_t remaining = count;
     size_t  bytesWritten = 0;
     int ret;
+
+    mutex_lock(&adata->lock);
 
     while (remaining) 
     {
@@ -101,14 +110,12 @@ static ssize_t at24c_write(struct file *file, const char __user *buf,
         
         /* ensure we don’t wrap past a page: */
         size_t page_off = offset % adata->page_size;
-        size_t chunk    = min(remaining,
-                              adata->page_size - page_off);
+        size_t chunk  = min(remaining, adata->page_size - page_off);
 
         adata->buf[0] = (offset >> 8) & 0xFF;
-        adata->buf[1] =  offset       & 0xFF;
+        adata->buf[1] =  offset & 0xFF;
 
-        if (copy_from_user(&adata->buf[2],
-                           buf + bytesWritten,
+        if (copy_from_user(&adata->buf[2], buf + bytesWritten,
                            chunk))
             return -EFAULT;
 
@@ -126,6 +133,7 @@ static ssize_t at24c_write(struct file *file, const char __user *buf,
         /* EEPROMs typically need a small delay here for the write cycle */
         msleep(1);    
     }
+    mutex_unlock(&adata->lock);
 
     return bytesWritten;
 }
@@ -159,6 +167,7 @@ static int at24c_probe(struct i2c_client *client)
     adata->page_size = AT24C_DEFAULT_PAGE_SIZE;
     adata->buf_sz    = AT24C_ADDR_BYTES + adata->page_size;
     adata->buf = devm_kmalloc(&client->dev, adata->buf_sz, GFP_KERNEL);
+    mutex_init(&adata->lock);
     if (!adata->buf)
         return -ENOMEM;
 
