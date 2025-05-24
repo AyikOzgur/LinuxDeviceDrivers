@@ -191,7 +191,7 @@ static void at24c_remove(struct i2c_client *client)
 
 static const struct of_device_id at24c_idtable[] = 
 {
-    { .compatible = "atmel,atc24c" },
+    { .compatible = "atmel,at24c" },
     {}
 };
 

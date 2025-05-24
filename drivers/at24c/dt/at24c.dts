@@ -12,7 +12,7 @@
             #size-cells    = <0>;
             status = "okay";
             atc24c@50 {
-                compatible = "atmel,atc24c";
+                compatible = "atmel,at24c";
                 reg         = <0x50>;    /* 0xA0 >> 1 */
                 status      = "okay";
             };
