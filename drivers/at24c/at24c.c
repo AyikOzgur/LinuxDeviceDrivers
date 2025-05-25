@@ -108,7 +108,7 @@ static ssize_t at24c_write(struct file *file, const char __user *buf,
     {
         loff_t offset = *ppos;
         
-        /* ensure we don’t wrap past a page: */
+        /* Ensure we don’t wrap past a page: */
         size_t page_off = offset % adata->page_size;
         size_t chunk  = min(remaining, adata->page_size - page_off);
 
@@ -204,6 +204,7 @@ static const struct of_device_id at24c_idtable[] =
     {}
 };
 
+/* Bind mechanism based on DT. */
 MODULE_DEVICE_TABLE(of, at24c_idtable);
 
 static struct i2c_driver at24c_driver = 
