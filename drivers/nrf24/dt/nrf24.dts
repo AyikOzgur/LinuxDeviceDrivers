@@ -1,0 +1,20 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2835";
+
+    fragment@0 {
+        target = <&spi0>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            status = "okay";
+            nrf24@0 {
+                compatible = "nordic,nrf24";
+                reg = <0>; /* chip-select 0 (CE0) */
+                status = "okay";
+            };
+        };
+    };
+};
