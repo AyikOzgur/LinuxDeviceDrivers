@@ -19,41 +19,32 @@ struct nrf24_config
 
 int main(void)
 {
-    int tx_fd = open("/dev/nrf24-0", O_RDWR);
+    int tx_fd = open("/dev/nrf24-1", O_RDWR);
     if (tx_fd < 0) {
-        perror("open /dev/nrf24-0");
+        perror("open /dev/nrf24-1");
         return 1;
     }
 
     /* small pause so the module side can settle */
     sleep(1);
 
-    int rx_fd = open("/dev/nrf24-1", O_RDWR);
-    if (rx_fd < 0) {
-        perror("open /dev/nrf24-1");
-        close(tx_fd);
-        return 1;
-    }
-
     /* configure the transmitter */
-    struct nrf24_config tx_cfg = {
-        .type = 0,                    /* unused on TX side */
-        .ce_gpio    = 591,              /* e.g. GPIO20 */
+    struct nrf24_config tx_cfg = 
+    {
+        .type = 0,           /* 0 - Transmitter. */
+        .ce_gpio    = 592,   /* e.g. GPIO20 */
     };
-    if (ioctl(tx_fd, INIT_NRF24, &tx_cfg) < 0) {
+
+    if (ioctl(tx_fd, INIT_NRF24, &tx_cfg) < 0) 
+    {
         perror("ioctl INIT_NRF24 tx");
         goto cleanup;
     }
-
-    /* configure the receiver */
-    struct nrf24_config rx_cfg = {
-        .type = 1,          /* unused on RX side */
-        .ce_gpio  = 592,              /* e.g. GPIO21 */
-    };
-    if (ioctl(rx_fd, INIT_NRF24, &rx_cfg) < 0) {
-        perror("ioctl INIT_NRF24 rx");
-        goto cleanup;
+    else
+    {
+        printf("nrf24-0 is init as tx.\n");
     }
+
     /* —— child: transmitter loop —— */
     char payload[PAYLOAD_SIZE];
     const char *msg = "Hello, nRF24!";
@@ -61,10 +52,8 @@ int main(void)
     memset(payload, 0, PAYLOAD_SIZE);
     strncpy(payload, msg, PAYLOAD_SIZE - 1);
 
-    char buf[PAYLOAD_SIZE];
-
     while (1)
-    {
+    {        
         if (write(tx_fd, payload, PAYLOAD_SIZE) != PAYLOAD_SIZE) 
         {
             perror("write payload");
@@ -72,20 +61,10 @@ int main(void)
         }
         printf("TX: sent \"%s\"\n", payload);
         sleep(1);
-
-        ssize_t rd = read(rx_fd, buf, PAYLOAD_SIZE);
-        if (rd < 0) {
-            perror("read payload");
-            break;
-        }
-        /* ensure NUL termination */
-        buf[rd < PAYLOAD_SIZE ? rd : PAYLOAD_SIZE-1] = '\0';
-        printf("RX: got %zd bytes: \"%s\"\n", rd, buf);
-        sleep(1);
     }
+
 
 cleanup:
     close(tx_fd);
-    close(rx_fd);
     return 0;
 }

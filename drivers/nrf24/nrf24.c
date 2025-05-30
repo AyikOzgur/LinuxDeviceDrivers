@@ -9,15 +9,16 @@
 #include <linux/mutex.h>
 #include <linux/gpio/consumer.h>
 
+#define CHECK_BIT_VALUE(u8_val, bit_pos)  ( ((u8_val) >> (bit_pos)) & 0x1U )
+
 
 #define INIT_NRF24 _IO('G', 0)
-
+#define NRF24_MAX_PAYLOAD 32
 
 struct nrf24_config
 {
-    u64 tx_address;
-    u64 rx_address;
-    u8 ce_gpio;
+    u64 type;
+    u64 ce_gpio;
 };
 
 struct nrf24
@@ -45,7 +46,7 @@ struct nrf24
 
 /* Register map */
 #define REG_CONFIG              0x00
-#define REG_EA_AA               0x01
+#define REG_EN_AA               0x01
 #define REG_EN_RXADDR           0x02
 #define REG_SETUP_AW            0x03
 #define REG_SETUP_RETR          0X04
@@ -70,7 +71,8 @@ struct nrf24
 #define REG_FIFO_STATUS         0x17
 #define REG_DYNPD               0x1C
 #define REG_FEATURE             0x1D
-
+#define REG_RX_ADDR_P0          0xA0
+#define TX_ADDR                 0x10
 
 /*———————————————————————————*/
 /* Bit-mask helpers             */
@@ -78,12 +80,12 @@ struct nrf24
 #define CONFIG_PRIM_RX    (1<<0)
 #define CONFIG_PWR_UP     (1<<1)
 #define CONFIG_EN_CRC     (1<<3)
+#define CONFIG_MASK_RX_DR (1<<6)
 
 #define STATUS_RX_DR      (1<<6)
 #define STATUS_TX_DS      (1<<5)
 #define STATUS_MAX_RT     (1<<4)
-
-
+#define STATUS_TX_FULL    (1<<0)
 
 static int nrf24_read_regs(struct nrf24 *nrf24, u8 start_reg,
                            u8 *buf, size_t len)
@@ -156,14 +158,173 @@ static int nrf24_set_mode(struct nrf24 *nrf24, bool rx)
     ret = nrf24_write_regs(nrf24, REG_CONFIG, &cfg, 1);
     if (ret) return ret;
 
-    /* 4) drive CE accordingly */
-    //gpio_set_value(ce_gpio, rx ? 1 : 0);
     return 0;
 }
 
+/*———————————————————————————*/
+/* Transmit a single payload   */
+/*———————————————————————————*/
+int nrf24_send(struct nrf24 *nrf, const u8 *data, size_t len)
+{
+    int ret;
+    u8 status;
+    struct spi_device *spi = nrf->device;
+    u8 cmd;
+
+    /* 1) Ensure CE=0 and PRIM_RX=0 (TX mode) */
+    ret = nrf24_set_mode(nrf, false);
+    if (ret) {
+        dev_err(&spi->dev, "set_mode(TX) failed: %d\n", ret);
+        return ret;
+    }
+
+    /* 2) Clear any old IRQ flags (TX_DS, MAX_RT) */
+    status = STATUS_TX_DS | STATUS_MAX_RT;
+    ret = nrf24_write_regs(nrf, REG_STATUS, &status, 1);
+    if (ret) {
+        dev_err(&spi->dev, "clear STATUS failed: %d\n", ret);
+        return ret;
+    }
+
+    /* 3) Flush the TX FIFO */
+    cmd = FLUSH_TX;
+    ret = spi_write(spi, &cmd, 1);
+    if (ret) {
+        dev_err(&spi->dev, "FLUSH_TX failed: %d\n", ret);
+        return ret;
+    }
+
+    /* 4) Write the payload in one go: [W_TX_PAYLOAD][data...] */
+    {
+        u8 txbuf[NRF24_MAX_PAYLOAD + 1];
+        txbuf[0] = W_TX_PAYLOAD;
+        memcpy(&txbuf[1], data, len);
+        ret = spi_write(spi, txbuf, len + 1);
+    }
+    if (ret) 
+    {
+        dev_err(&spi->dev, "W_TX_PAYLOAD failed: %d\n", ret);
+        return ret;
+    }
+
+    /* 4) drive CE accordingly */
+    gpiod_set_value(nrf->ce_gpio, 1);
+
+    /* 6) Poll STATUS (via NOP) until TX_DS or MAX_RT */
+    int counter = 2;
+    while (counter > 0)
+    {
+        // Keep checking TX_FULL from STATUS. TO check of data is sent or not.
+        u8 value;
+        nrf24_read_regs(nrf, REG_STATUS, &value, 1);
+        if (CHECK_BIT_VALUE(value, 5)) // TX_DS pos is 5.
+        {
+            pr_info("TX_DS is 1 \n");
+            break;
+        }
+        else
+        {
+            pr_info("TX_DS is 0 \n");
+        }
+        counter--;
+        msleep(1);
+    }
+    gpiod_set_value(nrf->ce_gpio, 0);
+
+    /* Cleant TX_DS by writting 1 to it. */
+
+    u8 valueStatus;
+    nrf24_read_regs(nrf, REG_STATUS, &valueStatus, 1);
+    msleep(1);
+
+    valueStatus &= ~STATUS_TX_DS;
+    nrf24_write_regs(nrf, REG_STATUS, &valueStatus, 1);
+    msleep(1);
+
+    return ret;
+}
 
 
+/*———————————————————————————*/
+/* Receive a single payload    */
+/*———————————————————————————*/
+int nrf24_receive(struct nrf24 *nrf24, u8 *data, size_t len)
+{
+    struct spi_device *device = nrf24->device;
+    u8 status, cmd;
+    int ret;
+    
+    /* a) switch to RX, CE=1 */
+    ret = nrf24_set_mode(nrf24, true);
+    if (ret) return ret;
 
+    gpiod_set_value(nrf24->ce_gpio, 1); // CE 1
+    msleep(1); // Wait until rx setting 130us
+
+    int counter = 10;
+    while (counter > 0)
+    {
+        nrf24_read_regs(nrf24, REG_STATUS, &status, 1);
+        if (CHECK_BIT_VALUE(status, 6)) 
+        {
+            pr_info("nrf24 - There is reading data.\n");
+            break;
+        }
+        msleep(1);
+        counter--;
+    }
+
+    if (counter <= 0)
+        pr_info("nrf24 - There is no reading data status register : %u.\n", status);
+
+    /* 5) R_RX_PAYLOAD: read out 'len' bytes into data[] */
+    cmd = R_RX_PAYLOAD;
+    ret = spi_write_then_read(device, &cmd, 1, data, len);
+    if (ret) {
+        pr_info("nrf24 - Error reading rc pipe.\n");
+        return ret;
+    }
+
+    //gpiod_set_value(nrf24->ce_gpio, 0); // CE 0
+
+    /* d) clear the RX_DR flag */
+    status |= STATUS_RX_DR;
+    nrf24_write_regs(nrf24, REG_STATUS, &status, 1);
+
+    return 0;
+}
+
+static int nrf24_init_defaults(struct nrf24 *nrf24)
+{
+    struct spi_device *spi = nrf24->device;
+    int ret;
+    u8 tmp;
+
+    /* 1) CONFIG: PWR_UP, DISABLE CRC */
+    tmp = 0;
+    tmp |= CONFIG_PWR_UP | CONFIG_MASK_RX_DR;
+    ret = nrf24_write_regs(nrf24, REG_CONFIG, &tmp, 1);
+    if (ret) return ret;
+
+    /* 2) Disable auto ack */
+    tmp = 0;
+    ret = nrf24_write_regs(nrf24, REG_EN_AA, &tmp, 1);
+    if (ret) return ret;
+
+    /* 3) Address width = 5 bytes */
+    tmp = 0x03;
+    ret = nrf24_write_regs(nrf24, REG_SETUP_AW, &tmp, 1);
+    if (ret) return ret;
+
+    /* 8) Fixed payload length = 32 on P0 */
+    tmp = 32;
+    ret = nrf24_write_regs(nrf24, REG_RX_PW_P0, &tmp, 1);
+    if (ret) return ret;
+
+    msleep(2); /* From power down to standby-1 mode, 1.5ms is required. */
+
+    return ret;
+}
 
 static int nrf24_open(struct inode *inode, struct file *file)
 {
@@ -173,30 +334,9 @@ static int nrf24_open(struct inode *inode, struct file *file)
     // Set nrf24 struct as private data, it is needed in write/read to have spi_device.
     file->private_data = nrf24;
 
+    int ret = nrf24_init_defaults(nrf24);
 
-    // Read initial value of 
-    /* Read CONFIG register, default value must be 8. */
-    //u8 address = CONFIG;
-    u8 data;
-    int ret = nrf24_read_regs(nrf24, REG_CONFIG, &data, 1);
-    if (ret)
-        pr_err("nrf24 - No communication with nrf24.\n");
-
-    pr_info("Default value of CONFIG : %d\n", data);
-
-    u8 data2 = 12;
-    ret = nrf24_write_regs(nrf24, REG_CONFIG, &data2, 1);
-    if (ret)
-        pr_err("nrf24 - No communication with nrf24 (write).\n");
-
-    u8 dataRead;
-    ret = nrf24_read_regs(nrf24, REG_CONFIG, &dataRead, 1);
-    if (ret)
-        pr_err("nrf24 - No communication with nrf24.\n");
-
-    pr_info("Aftetwritting value of CONFIG : %d\n", dataRead);
-
-    return 0;
+    return ret;
 }
 
 static int nrf24_release(struct inode *inode, struct file *file)
@@ -221,45 +361,118 @@ static long nrf24_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         }
         pr_info("nrf24 ce : %d\n", nrf24->config.ce_gpio);
 
-        // If it is <= 0, no ce is needed, module can be used only as rx.
-        if (nrf24->config.ce_gpio > 0)
+        // If it is 0 which means module is transmitter and needs CE.
+        nrf24->ce_gpio = gpio_to_desc(nrf24->config.ce_gpio);
+        if (!nrf24->ce_gpio)
         {
-            nrf24->ce_gpio = gpio_to_desc(nrf24->config.ce_gpio);
-            if (!nrf24->ce_gpio)
-            {
-                pr_err("nrf24 - Error getting gpio descripter");
-                return -EINVAL; // Invalid argument.
-            }
-            int ret = gpiod_direction_output(nrf24->ce_gpio, 0); // Default low.
-            if (ret)
-            {
-                pr_err("gpioctrl - Error setting pin %d as output\n", nrf24->config.ce_gpio);
+            pr_err("nrf24 - Error getting gpio descripter : %d", nrf24->config.ce_gpio);
+            return -EINVAL; // Invalid argument.
+        }
+        int ret = gpiod_direction_output(nrf24->ce_gpio, 0); // Default low.
+        if (ret)
+        {
+            pr_err("gpioctrl - Error setting pin %d as output\n", nrf24->config.ce_gpio);
+            return ret;
+        }
+        pr_info("nrf24 - Ce is init..\n");
+
+        if (nrf24->config.type == 1)
+        {
+
+            u8 en_rxaddr = (1 << 0);  /* EN_RXADDR bit0 = pipe 0 */
+            ret = nrf24_write_regs(nrf24,
+                                REG_EN_RXADDR,
+                                &en_rxaddr,
+                                1);
+            if (ret) {
+                dev_err(&nrf24->device->dev,
+                        "nrf24 - failed to enable EN_RXADDR pipe0: %d\n", ret);
                 return ret;
             }
-            pr_info("nrf24 - Ce is init..\n");
-        }
+            pr_info("nrf24 - EN_RXADDR pipe 0 set = 0x%02x\n", en_rxaddr);
 
+            const u8 default_addr[5] = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE7 };
+            /* 4a) Write the 5-byte default address into RX_ADDR_P0 */
+            ret = nrf24_write_regs(nrf24,
+                                   REG_RX_ADDR_P0,
+                                   default_addr,
+                                   5);
+            pr_info("nrf24 - Receiver address is init.\n");
+
+        }
+        else
+        {
+            const u8 default_addr[5] = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE7 };
+            /* 4a) Write the 5-byte default address into RX_ADDR_P0 */
+            ret = nrf24_write_regs(nrf24,
+                                   REG_TX_ADDR,
+                                   default_addr,
+                                   5);
+            pr_info("nrf24 - Transmitte address is init.\n");
+
+        }
 
         break;
     }
     default:
         return 0;
     }
+
     return 0;
 }
 
-static ssize_t nrf24_read(struct file *file, char __user *buf,
-                          size_t count, loff_t *ppos)
+static ssize_t nrf24_read(struct file *file,
+                          char __user *ubuf,
+                          size_t count,
+                          loff_t *ppos)
 {
-    struct nrf24 *adata = file->private_data;
-    return 0;
+    struct nrf24 *nrf = file->private_data;
+    u8 buf[NRF24_MAX_PAYLOAD];
+    size_t len;
+    int ret;
+
+    /* limit to max payload */
+    if (count > NRF24_MAX_PAYLOAD)
+        return -EINVAL;
+    len = count;
+
+    /* receive into our stack buffer */
+    ret = nrf24_receive(nrf, buf, len);
+    if (ret)
+        return ret;
+
+    /* copy back to userspace */
+    if (copy_to_user(ubuf, buf, len))
+        return -EFAULT;
+
+    return len;           /* number of bytes read */
 }
 
-static ssize_t nrf24_write(struct file *file, const char __user *buf,
-                           size_t count, loff_t *ppos)
+static ssize_t nrf24_write(struct file *file,
+                           const char __user *ubuf,
+                           size_t count,
+                           loff_t *ppos)
 {
-    struct nrf24 *adata  = file->private_data;
-    return 0;
+    struct nrf24 *nrf = file->private_data;
+    u8 buf[NRF24_MAX_PAYLOAD];
+    size_t len;
+    int ret;
+
+    /* limit to max payload */
+    if (count > NRF24_MAX_PAYLOAD)
+        return -EINVAL;
+    len = count;
+
+    /* copy from userspace */
+    if (copy_from_user(buf, ubuf, len))
+        return -EFAULT;
+
+    /* send it */
+    ret = nrf24_send(nrf, buf, len);
+    if (ret)
+        return ret;       /* propagate error (-ETIMEDOUT, etc.) */
+
+    return len;           /* number of bytes sent */
 }
 
 static loff_t nrf24_llseek(struct file *file, loff_t offset, int whence)
