@@ -45,38 +45,35 @@ struct nrf24
 #define NOP                 0xFF
 
 /* Register map */
-#define REG_CONFIG              0x00
-#define REG_EN_AA               0x01
-#define REG_EN_RXADDR           0x02
-#define REG_SETUP_AW            0x03
-#define REG_SETUP_RETR          0X04
-#define REG_RF_CH               0x05
-#define REG_RF_SETUP            0x06
-#define REG_STATUS              0x07
-#define REG_OBSERVE_TX          0x08
-#define REG_CD                  0x09
-#define REG_RX_ADDR_P0          0x0A
-#define REG_RX_ADDR_P1          0x0B
-#define REG_RX_ADDR_P2          0x0C
-#define REG_RX_ADDR_P3          0x0D
-#define REG_RX_ADDR_P4          0x0E
-#define REG_RX_ADDR_P5          0x0F
-#define REG_TX_ADDR             0x10
-#define REG_RX_PW_P0            0x11
-#define REG_RX_PW_P1            0x12
-#define REG_RX_PW_P2            0x13
-#define REG_RX_PW_P3            0x14
-#define REG_RX_PW_P4            0x15
-#define REG_RX_PW_P5            0x16
-#define REG_FIFO_STATUS         0x17
-#define REG_DYNPD               0x1C
-#define REG_FEATURE             0x1D
-#define REG_RX_ADDR_P0          0xA0
-#define TX_ADDR                 0x10
+#define REG_CONFIG          0x00
+#define REG_EN_AA           0x01
+#define REG_EN_RXADDR       0x02
+#define REG_SETUP_AW        0x03
+#define REG_SETUP_RETR      0X04
+#define REG_RF_CH           0x05
+#define REG_RF_SETUP        0x06
+#define REG_STATUS          0x07
+#define REG_OBSERVE_TX      0x08
+#define REG_CD              0x09
+#define REG_RX_ADDR_P0      0x0A
+#define REG_RX_ADDR_P1      0x0B
+#define REG_RX_ADDR_P2      0x0C
+#define REG_RX_ADDR_P3      0x0D
+#define REG_RX_ADDR_P4      0x0E
+#define REG_RX_ADDR_P5      0x0F
+#define REG_TX_ADDR         0x10
+#define REG_RX_PW_P0        0x11
+#define REG_RX_PW_P1        0x12
+#define REG_RX_PW_P2        0x13
+#define REG_RX_PW_P3        0x14
+#define REG_RX_PW_P4        0x15
+#define REG_RX_PW_P5        0x16
+#define REG_FIFO_STATUS     0x17
+#define REG_DYNPD           0x1C
+#define REG_FEATURE         0x1D
+#define REG_RX_ADDR_P0      0xA0
+#define TX_ADDR             0x10
 
-/*———————————————————————————*/
-/* Bit-mask helpers             */
-/*———————————————————————————*/
 #define CONFIG_PRIM_RX    (1<<0)
 #define CONFIG_PWR_UP     (1<<1)
 #define CONFIG_EN_CRC     (1<<3)
@@ -134,9 +131,6 @@ static int nrf24_write_regs(struct nrf24 *nrf24,
     return ret;
 }
 
-/*———————————————————————————*/
-/* Switch between RX/TX        */
-/*———————————————————————————*/
 static int nrf24_set_mode(struct nrf24 *nrf24, bool rx)
 {
     struct spi_device *device = nrf24->device;
@@ -161,9 +155,6 @@ static int nrf24_set_mode(struct nrf24 *nrf24, bool rx)
     return 0;
 }
 
-/*———————————————————————————*/
-/* Transmit a single payload   */
-/*———————————————————————————*/
 int nrf24_send(struct nrf24 *nrf, const u8 *data, size_t len)
 {
     int ret;
@@ -171,14 +162,14 @@ int nrf24_send(struct nrf24 *nrf, const u8 *data, size_t len)
     struct spi_device *spi = nrf->device;
     u8 cmd;
 
-    /* 1) Ensure CE=0 and PRIM_RX=0 (TX mode) */
+    /* TX mode */
     ret = nrf24_set_mode(nrf, false);
     if (ret) {
         dev_err(&spi->dev, "set_mode(TX) failed: %d\n", ret);
         return ret;
     }
 
-    /* 2) Clear any old IRQ flags (TX_DS, MAX_RT) */
+    /* Clear any old IRQ flags (TX_DS, MAX_RT) */
     status = STATUS_TX_DS | STATUS_MAX_RT;
     ret = nrf24_write_regs(nrf, REG_STATUS, &status, 1);
     if (ret) {
@@ -186,68 +177,61 @@ int nrf24_send(struct nrf24 *nrf, const u8 *data, size_t len)
         return ret;
     }
 
-    /* 3) Flush the TX FIFO */
+    /* Flush the TX FIFO */
     cmd = FLUSH_TX;
     ret = spi_write(spi, &cmd, 1);
-    if (ret) {
+    if (ret) 
+    {
         dev_err(&spi->dev, "FLUSH_TX failed: %d\n", ret);
         return ret;
     }
 
-    /* 4) Write the payload in one go: [W_TX_PAYLOAD][data...] */
-    {
-        u8 txbuf[NRF24_MAX_PAYLOAD + 1];
-        txbuf[0] = W_TX_PAYLOAD;
-        memcpy(&txbuf[1], data, len);
-        ret = spi_write(spi, txbuf, len + 1);
-    }
+    /* Write the payload in one go: [W_TX_PAYLOAD][data...] */
+    u8 txbuf[NRF24_MAX_PAYLOAD + 1];
+    txbuf[0] = W_TX_PAYLOAD;
+    memcpy(&txbuf[1], data, len);
+    ret = spi_write(spi, txbuf, len + 1);
+
     if (ret) 
     {
         dev_err(&spi->dev, "W_TX_PAYLOAD failed: %d\n", ret);
         return ret;
     }
 
-    /* 4) drive CE accordingly */
+    /* Drive CE accordingly */
     gpiod_set_value(nrf->ce_gpio, 1);
 
-    /* 6) Poll STATUS (via NOP) until TX_DS or MAX_RT */
-    int counter = 2;
+    /* It takes 130us until TX mode is ready. */
+    usleep_range(130, 140);
+
+    /* Try for 4 ms. */
+    int counter = 4;
     while (counter > 0)
     {
-        // Keep checking TX_FULL from STATUS. TO check of data is sent or not.
         u8 value;
         nrf24_read_regs(nrf, REG_STATUS, &value, 1);
         if (CHECK_BIT_VALUE(value, 5)) // TX_DS pos is 5.
-        {
-            pr_info("TX_DS is 1 \n");
             break;
-        }
-        else
-        {
-            pr_info("TX_DS is 0 \n");
-        }
+
         counter--;
         msleep(1);
     }
-    gpiod_set_value(nrf->ce_gpio, 0);
 
-    /* Cleant TX_DS by writting 1 to it. */
+    if (counter <= 0)
+        pr_info("No data in rx fifo.\n");
 
-    u8 valueStatus;
-    nrf24_read_regs(nrf, REG_STATUS, &valueStatus, 1);
+    /* Device should not stay in tx mode then 4 ms.*/
+    gpiod_set_value(nrf->ce_gpio, 0); 
+
+    nrf24_read_regs(nrf, REG_STATUS, &status, 1);
     msleep(1);
 
-    valueStatus &= ~STATUS_TX_DS;
-    nrf24_write_regs(nrf, REG_STATUS, &valueStatus, 1);
-    msleep(1);
+    status &= ~STATUS_TX_DS;
+    nrf24_write_regs(nrf, REG_STATUS, &status, 1);
 
     return ret;
 }
 
-
-/*———————————————————————————*/
-/* Receive a single payload    */
-/*———————————————————————————*/
 int nrf24_receive(struct nrf24 *nrf24, u8 *data, size_t len)
 {
     struct spi_device *device = nrf24->device;
@@ -258,8 +242,10 @@ int nrf24_receive(struct nrf24 *nrf24, u8 *data, size_t len)
     ret = nrf24_set_mode(nrf24, true);
     if (ret) return ret;
 
-    gpiod_set_value(nrf24->ce_gpio, 1); // CE 1
-    msleep(1); // Wait until rx setting 130us
+    gpiod_set_value(nrf24->ce_gpio, 1);
+
+    /* It takes 130us until RX mode is ready. */
+    usleep_range(130, 140);
 
     int counter = 10;
     while (counter > 0)
@@ -275,17 +261,16 @@ int nrf24_receive(struct nrf24 *nrf24, u8 *data, size_t len)
     }
 
     if (counter <= 0)
-        pr_info("nrf24 - There is no reading data status register : %u.\n", status);
+        pr_info("nrf24 - There is no reading data status register.\n");
 
     /* 5) R_RX_PAYLOAD: read out 'len' bytes into data[] */
     cmd = R_RX_PAYLOAD;
     ret = spi_write_then_read(device, &cmd, 1, data, len);
-    if (ret) {
+    if (ret) 
+    {
         pr_info("nrf24 - Error reading rc pipe.\n");
         return ret;
     }
-
-    //gpiod_set_value(nrf24->ce_gpio, 0); // CE 0
 
     /* d) clear the RX_DR flag */
     status |= STATUS_RX_DR;
@@ -374,22 +359,14 @@ static long nrf24_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             pr_err("gpioctrl - Error setting pin %d as output\n", nrf24->config.ce_gpio);
             return ret;
         }
-        pr_info("nrf24 - Ce is init..\n");
 
         if (nrf24->config.type == 1)
         {
-
             u8 en_rxaddr = (1 << 0);  /* EN_RXADDR bit0 = pipe 0 */
             ret = nrf24_write_regs(nrf24,
                                 REG_EN_RXADDR,
                                 &en_rxaddr,
                                 1);
-            if (ret) {
-                dev_err(&nrf24->device->dev,
-                        "nrf24 - failed to enable EN_RXADDR pipe0: %d\n", ret);
-                return ret;
-            }
-            pr_info("nrf24 - EN_RXADDR pipe 0 set = 0x%02x\n", en_rxaddr);
 
             const u8 default_addr[5] = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE7 };
             /* 4a) Write the 5-byte default address into RX_ADDR_P0 */
@@ -397,8 +374,6 @@ static long nrf24_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                                    REG_RX_ADDR_P0,
                                    default_addr,
                                    5);
-            pr_info("nrf24 - Receiver address is init.\n");
-
         }
         else
         {
@@ -408,7 +383,6 @@ static long nrf24_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                                    REG_TX_ADDR,
                                    default_addr,
                                    5);
-            pr_info("nrf24 - Transmitte address is init.\n");
 
         }
 
