@@ -27,9 +27,6 @@ int main(void)
         return 1;
     }
 
-    /* small pause so the module side can settle */
-    sleep(1);
-
     int rx_fd = open("/dev/nrf24-1", O_RDWR);
     if (rx_fd < 0) 
     {
@@ -64,34 +61,30 @@ int main(void)
         goto cleanup;
     }
 
-
-    char payload[PAYLOAD_SIZE];
-    const char *msg = "Hello, nRF24!";
-    memset(payload, 0, PAYLOAD_SIZE);
-    strncpy(payload, msg, PAYLOAD_SIZE - 1);
-
-    // Reader buffer.
-    char buf[PAYLOAD_SIZE];
-
+    char txBuffer[PAYLOAD_SIZE];
+    char rxBuffer[PAYLOAD_SIZE];
+    int counter = 0;
     while (1)
     {
-        if (write(tx_fd, payload, PAYLOAD_SIZE) != PAYLOAD_SIZE) 
+        sprintf(txBuffer, "Nrf24 message : %d", counter);
+        if (write(tx_fd, txBuffer, PAYLOAD_SIZE) != PAYLOAD_SIZE) 
         {
             perror("write payload");
             break;
         }
-        printf("TX: sent \"%s\"\n", payload);
+        printf("TX: sent \"%s\"\n", txBuffer);
         sleep(1);
 
-        ssize_t rd = read(rx_fd, buf, PAYLOAD_SIZE);
+        ssize_t rd = read(rx_fd, rxBuffer, PAYLOAD_SIZE);
         if (rd < 0) 
         {
             perror("read payload");
             break;
         }
-        buf[rd < PAYLOAD_SIZE ? rd : PAYLOAD_SIZE-1] = '\0';
-        printf("RX: got %zd bytes: \"%s\"\n", rd, buf);
+        rxBuffer[rd < PAYLOAD_SIZE ? rd : PAYLOAD_SIZE-1] = '\0';
+        printf("RX: got : \"%s\"\n", rxBuffer);
         sleep(1);
+        counter++;
     }
 
 cleanup:
