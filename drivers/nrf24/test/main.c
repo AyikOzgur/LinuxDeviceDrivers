@@ -13,8 +13,9 @@
 
 struct nrf24_config 
 {
-    uint64_t type;  /* 0 - Transmitter, 1 - Receiver */
     uint64_t ce_gpio; /* GPIO number of CE pin */
+    uint8_t tx_address[5];
+    uint8_t rx_address[5];
 };
 
 int main(void)
@@ -40,8 +41,9 @@ int main(void)
     /* configure the transmitter */
     struct nrf24_config tx_cfg = 
     {
-        .type = 0,           /* TX */
         .ce_gpio    = 591,   /* GPIO20 on raspberry pi */
+        .tx_address = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE5 },
+        .rx_address = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE7 }, /* Not used in this test app. */
     };
     if (ioctl(tx_fd, INIT_NRF24, &tx_cfg) < 0) 
     {
@@ -52,8 +54,9 @@ int main(void)
     /* configure the receiver */
     struct nrf24_config rx_cfg = 
     {
-        .type = 1,          /* RX */
         .ce_gpio  = 592,    /* GPIO21 on raspbbery pi */
+        .tx_address = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE7 }, /* Not used in this test app. */
+        .rx_address = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE5 },
     };
     if (ioctl(rx_fd, INIT_NRF24, &rx_cfg) < 0) 
     {
